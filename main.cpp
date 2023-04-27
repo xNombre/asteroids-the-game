@@ -13,6 +13,7 @@
 #include <random>
 #include <vector>
 #include <list>
+#include <cstring>
 
 std::mutex ship_pos_mtx;
 float x_position = 0.0f;
@@ -33,6 +34,7 @@ struct asteroid{
 };
 
 
+std::mutex asteroids_mtx;
 
 std::mt19937 e2(std::random_device{}());
 const float radius = 0.4f; // radius of the polygon
@@ -95,17 +97,20 @@ void display()
 	glVertex2f(0.0f / scale, -0.3f / scale);
 	glEnd();
 
-
-    glColor3f(1.0f, 1.0f, 1.0f);
-    for(auto element: asteroids){
-        glLoadIdentity();
-        glTranslatef(element.x, element.y, 0.0f);
-        glBegin(GL_POLYGON);
-        for (int i = 0; i < 6; i++) {
-            glVertex2fv(element.vertices[i]);
-        }
-        glEnd();
-    }
+	{
+	std::unique_lock<std::mutex> lock(asteroids_mtx);
+	
+		glColor3f(1.0f, 1.0f, 1.0f);
+		for (auto element : asteroids) {
+			glLoadIdentity();
+			glTranslatef(element.x, element.y, 0.0f);
+			glBegin(GL_POLYGON);
+			for (int i = 0; i < 6; i++) {
+				glVertex2fv(element.vertices[i]);
+			}
+			glEnd();
+		}
+	}
 
 
 
@@ -132,8 +137,21 @@ move_dir_enum ship_move_dir = move_dir_enum::NONE;
 std::thread ship_move_thread;
 std::condition_variable move_dir_cond;
 
+void keyboard(unsigned char key, int x, int y)
+{
+	std::cout << " keys " << key << std::endl;
+	switch (key) {
+
+	case 32:
+		generateRandomPolygon();
+		break;
+	}
+
+}
+
 void specialKeys(int key, int x, int y)
 {
+	std::cout << "special keys " << key << std::endl;
 	move_dir_enum new_dir = move_dir_enum::NONE;
 	switch (key) {
 	case GLUT_KEY_LEFT: {
@@ -210,6 +228,23 @@ void move_thread()
 	}
 }
 
+std::thread asteroids_thread;
+std::condition_variable asteroids_cv;
+bool run_asteroids = true;
+
+void asteroids_loop()
+{
+	while (run_asteroids) {
+		std::unique_lock<std::mutex> lock(asteroids_mtx);
+
+		for (auto &elem : asteroids) {
+			elem.y -= 0.002;
+		}
+
+		asteroids_cv.wait_for(lock, std::chrono::milliseconds(10));
+	}
+}
+
 int main(int argc, char** argv)
 {
 	glutInit(&argc, argv);
@@ -218,13 +253,14 @@ int main(int argc, char** argv)
 	glutCreateWindow("Asteroids - The Game");
     generateRandomPolygon(); // generate the initial polygon
     glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
+	asteroids_thread = std::thread(asteroids_loop);
 	glutDisplayFunc(display);
 	glutReshapeFunc(resize);
+	glutKeyboardFunc(keyboard);
 	glutSpecialFunc(specialKeys);
 	glutSpecialUpFunc(specialKeysUp);
 	glutMainLoop();
 
-  
 
 	return 0;
 }
