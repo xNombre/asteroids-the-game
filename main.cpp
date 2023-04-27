@@ -1,190 +1,83 @@
-#include <stdio.h>
+#include <GLUT/glut.h>
 
-#define GL_SILENCE_DEPRECATION
+GLfloat x_position = 0.0f;
+GLfloat y_position = -0.8f;
 
-// Without this gl.h gets included instead of gl3.h
-#define GLFW_INCLUDE_NONE
-#include <GLFW/glfw3.h>
-
-// For includes related to OpenGL, make sure their are included after glfw3.h
-#include <OpenGL/gl3.h>
-
-void errorCallback(int error, const char* description)
+void display()
 {
-    fputs(description, stderr);
-}
-
-void keyCallback(GLFWwindow* window, int key, int scancode, int action, int mods)
-{
-    if (key == GLFW_KEY_ESCAPE && action == GLFW_PRESS)
-        glfwSetWindowShouldClose(window, GLFW_TRUE);
-}
-
-void frameBufferResizeCallback(GLFWwindow* window, int width, int height){
-   glViewport(0, 0, width, height);
-}
-
-
-void display(void)
-{
-
-    glClearColor(1.0, 1.0, 1.0, 1.0);
+    float scale = 10.0f;
+    glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
     glClear(GL_COLOR_BUFFER_BIT);
     glMatrixMode(GL_MODELVIEW);
-    glShadeModel(GL_SMOOTH);
-    glColor3f(0.0f, 0.0f, 0.0f);
-    glPushMatrix();
     glLoadIdentity();
-    glScalef(2.0, 2.0, 0.0);
-    drawObject();
-    glPopMatrix();
+     glTranslatef(0.0f, 0.0f, 0.0f);
+     glBegin(GL_TRIANGLES);
+    glColor3f(1.0f, 1.0f, 1.0f);
+    glVertex2f(0.0f/scale, 1.0f/scale);
+    glVertex2f(-0.6f/scale, -0.6f/scale);
+    glVertex2f(0.0f/scale,  -0.3f/scale);
+    glBegin(GL_TRIANGLES);
+    glVertex2f(0.0f/scale, 1.0f/scale);
+    glVertex2f(0.6f/scale, -0.6f/scale);
+    glVertex2f(0.0f/scale,  -0.3f/scale);
+    glEnd();
 
+    
+    glTranslatef(x_position, y_position, 0.0f);
+    
+    glBegin(GL_TRIANGLES);
+    glColor3f(1.0f, 1.0f, 1.0f);
+    glVertex2f(0.0f/scale, 1.0f/scale);
+    glVertex2f(-0.6f/scale, -0.6f/scale);
+    glVertex2f(0.0f/scale,  -0.3f/scale);
+    glBegin(GL_TRIANGLES);
+    glVertex2f(0.0f/scale, 1.0f/scale);
+    glVertex2f(0.6f/scale, -0.6f/scale);
+    glVertex2f(0.0f/scale,  -0.3f/scale);
+
+
+    glEnd();
+   
     glFlush();
+    glutPostRedisplay();
+
+    glutSwapBuffers();
 }
 
-int main(void)
+void resize(int w, int h)
 {
-    GLFWwindow* window;
+    glViewport(0, 0, w, h);
+    glMatrixMode(GL_PROJECTION);
+    glLoadIdentity();
+    gluOrtho2D(-1.0, 1.0, -1.0, 1.0);
+}
 
-    // Set callback for errors
-    glfwSetErrorCallback(errorCallback);
 
-    // Initialize the library
-    if (!glfwInit())
-        return -1;
-
-    glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
-    glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 1);
-
-    // Without these two hints, nothing above OpenGL version 2.1 is supported
-    glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GLFW_TRUE);
-    glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
-
-    // Create a windowed mode window and its OpenGL context
-    window = glfwCreateWindow(640, 480, "Asteroids - the game", NULL, NULL);
-    if (!window)
+void specialKeys(int key, int x, int y)
+{
+    switch (key)
     {
-        glfwTerminate();
-        return -1;
+    case GLUT_KEY_LEFT:
+        x_position -= 0.05f;
+        glutPostRedisplay();
+        break;
+    case GLUT_KEY_RIGHT:
+        x_position += 0.05f;
+        glutPostRedisplay();
+        break;
     }
 
-    // Set callback for window
-    glfwSetKeyCallback(window, keyCallback);
+}
 
-    // Set callback fro framebuffer
-    glfwSetFramebufferSizeCallback(window, frameBufferResizeCallback);
-
-    // Make the window's context current
-    glfwMakeContextCurrent(window);
-
-    // Used to avoid screen tearing
-    glfwSwapInterval(1);
-
-    //OpenGL initializations start from here
-    glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
-
-    /* Vertex array object*/
-    unsigned int VAO;
-    glGenVertexArrays(1, &VAO); 
-    glBindVertexArray(VAO);
-
-    // Vertex data and buffer
-    float vertices[] = {
-        0.0f, 1.0f, 0.0f,
-        -0.6f, -0.6f, 0.0f,
-        0.0f,  -0.3f, 0.0f,
-        0.0f, 1.0f, 0.0f,
-        0.6f, -0.6f, 0.0f,
-        0.0f,  -0.3f, 0.0f,
-    };
-    
-    unsigned int VBO;
-    glGenBuffers(1, &VBO);  
-    glBindBuffer(GL_ARRAY_BUFFER, VBO);
-    glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
-
-    // Vertex shader
-    const char* vertexShaderSource = "#version 410 core\n"
-    "layout (location = 0) in vec3 aPos;\n"
-    "void main()\n"
-    "{\n"
-    "   gl_Position = vec4(aPos.x, aPos.y, aPos.z, 1.0);\n"
-    "}\0";
-    unsigned int vertexShader;
-    vertexShader = glCreateShader(GL_VERTEX_SHADER);
-    glShaderSource(vertexShader, 1, &vertexShaderSource, NULL);
-    glCompileShader(vertexShader);
-    int  success;
-    char infoLog[512];
-    glGetShaderiv(vertexShader, GL_COMPILE_STATUS, &success);
-    if(!success)
-    {
-        glGetShaderInfoLog(vertexShader, 512, NULL, infoLog);
-        fputs(infoLog, stderr);
-    }
-
-    // Fragment shader
-    const char* fragmentShaderSource = "#version 410 core\n"
-    "out vec4 FragColor;\n"
-    "void main()\n"
-    "{\n"
-    "   FragColor = vec4(1.0f, 1.0f, 1.0f, 1.0f);\n"
-    "}\0";
-    unsigned int fragmentShader;
-    fragmentShader = glCreateShader(GL_FRAGMENT_SHADER);
-    glShaderSource(fragmentShader, 1, &fragmentShaderSource, NULL);
-    glCompileShader(fragmentShader);
-    glGetShaderiv(fragmentShader, GL_COMPILE_STATUS, &success);
-    if(!success)
-    {
-        glGetShaderInfoLog(vertexShader, 512, NULL, infoLog);
-        fputs(infoLog, stderr);
-    }
-
-    // Shader program
-    unsigned int shaderProgram;
-    shaderProgram = glCreateProgram();
-    glAttachShader(shaderProgram, vertexShader);
-    glAttachShader(shaderProgram, fragmentShader);
-    glLinkProgram(shaderProgram);
-    glDeleteShader(vertexShader);
-    glDeleteShader(fragmentShader);
-    glGetProgramiv(shaderProgram, GL_LINK_STATUS, &success);
-    if(!success) {
-      glGetProgramInfoLog(shaderProgram, 512, NULL, infoLog);
-      fputs(infoLog, stderr);
-    }
-    glUseProgram(shaderProgram);
-
-    // Binding the buffers
-    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void*)0);
-    glEnableVertexAttribArray(0);  
-
-    //OpenGL initializations end here
-
-    // Loop until the user closes the window
-    while (!glfwWindowShouldClose(window))
-    {
-        // Resize the viewport
-        int width, height;
-        glfwGetFramebufferSize(window, &width, &height);
-        glViewport(0, 0, width, height);
-
-        // OpenGL Rendering related code
-        glClear(GL_COLOR_BUFFER_BIT);
-        glUseProgram(shaderProgram);
-        glBindVertexArray(VAO);
-        glDrawArrays(GL_TRIANGLES, 0, 3);
-        glDrawArrays(GL_TRIANGLES, 3, 6);
-        
-        // Swap front and back buffers
-        glfwSwapBuffers(window);
-
-        // Poll for and process events
-        glfwPollEvents();
-    }
-
-    glfwDestroyWindow(window);
-    glfwTerminate();
+int main(int argc, char** argv)
+{
+    glutInit(&argc, argv);
+    glutInitDisplayMode(GLUT_DOUBLE | GLUT_RGB);
+    glutInitWindowSize(800, 600);
+    glutCreateWindow("Triangle");
+    glutDisplayFunc(display);
+    glutReshapeFunc(resize);
+    glutSpecialFunc(specialKeys);
+    glutMainLoop();
     return 0;
 }
