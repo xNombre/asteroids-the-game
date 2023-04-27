@@ -10,6 +10,9 @@
 #include <condition_variable>
 #include <atomic>
 #include <iostream>
+#include <random>
+#include <vector>
+#include <list>
 
 std::mutex ship_pos_mtx;
 float x_position = 0.0f;
@@ -19,6 +22,53 @@ float triangle_speed = 0.005f;
 
 int window_width = 800;
 int window_height = 600;
+
+struct asteroid{
+  float vertices[6][2];
+  float x, y;
+
+  asteroid():x(0),y(0){
+    memset(vertices, 0, sizeof(vertices));
+  }
+};
+
+
+
+std::mt19937 e2(std::random_device{}());
+const float radius = 0.4f; // radius of the polygon
+const float randRange = 0.2f; // maximum deformation distance
+std::list <asteroid> asteroids;
+
+
+
+// Function to generate a random deformation for a vertex
+float randDeform() {
+    return ((float)rand() / RAND_MAX) * randRange * 2 - randRange;
+}
+
+// Function to generate a new polygon with deformed vertices
+void generateRandomPolygon() {
+    asteroid newAsteroid;
+
+    for (int i = 0; i < 6; i++) {
+        
+        std::uniform_real_distribution<float> uniform_dist(-1.0, 1.0);
+        newAsteroid.x = uniform_dist(e2);
+        newAsteroid.y = 1.0;
+        
+        float angle = i * 2 * M_PI / 6; // angle of current vertex
+        float x = radius * cos(angle) + randDeform();
+        float y = radius * sin(angle) + randDeform();
+        newAsteroid.vertices[i][0] = x/5.f;
+        newAsteroid.vertices[i][1] = y/5.f;
+    }
+    asteroids.push_back(newAsteroid);
+}
+
+
+
+
+
 
 void display()
 {
@@ -45,10 +95,26 @@ void display()
 	glVertex2f(0.0f / scale, -0.3f / scale);
 	glEnd();
 
+
+    glColor3f(1.0f, 1.0f, 1.0f);
+    for(auto element: asteroids){
+        glLoadIdentity();
+        glTranslatef(element.x, element.y, 0.0f);
+        glBegin(GL_POLYGON);
+        for (int i = 0; i < 6; i++) {
+            glVertex2fv(element.vertices[i]);
+        }
+        glEnd();
+    }
+
+
+
 	glFlush();
 	glutPostRedisplay();
 
 	glutSwapBuffers();
+
+
 }
 
 void resize(int w, int h)
@@ -76,6 +142,10 @@ void specialKeys(int key, int x, int y)
 	}
 	case GLUT_KEY_RIGHT:
 		new_dir = move_dir_enum::RIGHT;
+		break;
+	
+    case 32:
+		generateRandomPolygon();
 		break;
 	}
 
@@ -146,11 +216,15 @@ int main(int argc, char** argv)
 	glutInitDisplayMode(GLUT_DOUBLE | GLUT_RGB);
 	glutInitWindowSize(window_width, window_height);
 	glutCreateWindow("Asteroids - The Game");
+    generateRandomPolygon(); // generate the initial polygon
+    glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
 	glutDisplayFunc(display);
 	glutReshapeFunc(resize);
 	glutSpecialFunc(specialKeys);
 	glutSpecialUpFunc(specialKeysUp);
 	glutMainLoop();
+
+  
 
 	return 0;
 }
