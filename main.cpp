@@ -33,14 +33,21 @@ struct asteroid{
   }
 };
 
+struct shot{
+  float x, y;
+
+  shot():x(0),y(0){  }
+};
+
 
 std::mutex asteroids_mtx;
+std::mutex shots_mtx;
 
 std::mt19937 e2(std::random_device{}());
 const float radius = 0.4f; // radius of the polygon
 const float randRange = 0.2f; // maximum deformation distance
 std::list <asteroid> asteroids;
-
+std::list <shot> shots;
 
 
 // Function to generate a random deformation for a vertex
@@ -56,7 +63,7 @@ void generateRandomPolygon() {
         
         std::uniform_real_distribution<float> uniform_dist(-1.0, 1.0);
         newAsteroid.x = uniform_dist(e2);
-        newAsteroid.y = 1.0;
+        newAsteroid.y = 1.2;
         
         float angle = i * 2 * M_PI / 6; // angle of current vertex
         float x = radius * cos(angle) + randDeform();
@@ -69,6 +76,13 @@ void generateRandomPolygon() {
 
 
 
+void shoot() {
+    shot newShot;
+    std::cout<<"strzał"<<std::endl;
+    newShot.x = x_position;
+    newShot.y = y_position;
+    shots.push_back(newShot);
+}
 
 
 
@@ -111,6 +125,19 @@ void display()
 			glEnd();
 		}
 	}
+
+
+    for(auto element: shots){
+        glLoadIdentity();
+        glTranslatef(element.x, element.y, 0.0f);
+        glBegin(GL_POLYGON);
+
+        glVertex2f(0.05f / scale, 0.1f / scale);
+        glVertex2f(-0.05f / scale, 0.1f / scale);
+        glVertex2f(-0.05f / scale, -0.1f / scale);
+        glVertex2f(0.05f / scale, -0.1f / scale);
+        glEnd();
+    }
 
 
 
@@ -164,6 +191,9 @@ void specialKeys(int key, int x, int y)
 	
     case 32:
 		generateRandomPolygon();
+		break;
+    case GLUT_KEY_UP:
+		shoot();
 		break;
 	}
 
@@ -245,6 +275,24 @@ void asteroids_loop()
 	}
 }
 
+
+std::thread shots_thread;
+std::condition_variable shots_cv;
+bool run_shots = true;
+
+void shots_loop()
+{
+	while (run_shots) {
+		std::unique_lock<std::mutex> lock(shots_mtx);
+
+		for (auto &elem : shots) {
+			elem.y += 0.02;
+		}
+
+		shots_cv.wait_for(lock, std::chrono::milliseconds(10));
+	}
+}
+
 int main(int argc, char** argv)
 {
 	glutInit(&argc, argv);
@@ -254,6 +302,7 @@ int main(int argc, char** argv)
     generateRandomPolygon(); // generate the initial polygon
     glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
 	asteroids_thread = std::thread(asteroids_loop);
+    shots_thread = std::thread(shots_loop);
 	glutDisplayFunc(display);
 	glutReshapeFunc(resize);
 	glutKeyboardFunc(keyboard);
