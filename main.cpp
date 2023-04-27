@@ -24,21 +24,21 @@ float triangle_speed = 0.005f;
 int window_width = 800;
 int window_height = 600;
 
-struct asteroid{
-  float vertices[6][2];
-  float x, y;
+struct asteroid {
+	float vertices[6][2];
+	float x, y;
 
-  asteroid():x(0),y(0){
-    memset(vertices, 0, sizeof(vertices));
-  }
+	asteroid() :x(0), y(0)
+	{
+		memset(vertices, 0, sizeof(vertices));
+	}
 };
 
-struct shot{
-  float x, y;
+struct shot {
+	float x, y;
 
-  shot():x(0),y(0){  }
+	shot() :x(0), y(0) { }
 };
-
 
 std::mutex asteroids_mtx;
 std::mutex shots_mtx;
@@ -49,42 +49,43 @@ const float randRange = 0.2f; // maximum deformation distance
 std::list <asteroid> asteroids;
 std::list <shot> shots;
 
-
 // Function to generate a random deformation for a vertex
-float randDeform() {
-    return ((float)rand() / RAND_MAX) * randRange * 2 - randRange;
+float randDeform()
+{
+	return ((float)rand() / RAND_MAX) * randRange * 2 - randRange;
 }
 
 // Function to generate a new polygon with deformed vertices
-void generateRandomPolygon() {
-    asteroid newAsteroid;
+void generateRandomPolygon()
+{
+	asteroid newAsteroid;
 
-    for (int i = 0; i < 6; i++) {
-        
-        std::uniform_real_distribution<float> uniform_dist(-1.0, 1.0);
-        newAsteroid.x = uniform_dist(e2);
-        newAsteroid.y = 1.2;
-        
-        float angle = i * 2 * M_PI / 6; // angle of current vertex
-        float x = radius * cos(angle) + randDeform();
-        float y = radius * sin(angle) + randDeform();
-        newAsteroid.vertices[i][0] = x/5.f;
-        newAsteroid.vertices[i][1] = y/5.f;
-    }
-    asteroids.push_back(newAsteroid);
+	for (int i = 0; i < 6; i++) {
+
+		std::uniform_real_distribution<float> uniform_dist(-1.0, 1.0);
+		newAsteroid.x = uniform_dist(e2);
+		newAsteroid.y = 1.2;
+
+		float angle = i * 2 * M_PI / 6; // angle of current vertex
+		float x = radius * cos(angle) + randDeform();
+		float y = radius * sin(angle) + randDeform();
+		newAsteroid.vertices[i][0] = x / 5.f;
+		newAsteroid.vertices[i][1] = y / 5.f;
+	}
+	{
+		std::unique_lock<std::mutex> lock(asteroids_mtx);
+		asteroids.push_back(newAsteroid);
+	}
 }
 
-
-
-void shoot() {
-    shot newShot;
-    std::cout<<"strzał"<<std::endl;
-    newShot.x = x_position;
-    newShot.y = y_position;
-    shots.push_back(newShot);
+void shoot()
+{
+	shot newShot;
+	std::cout << "strzał" << std::endl;
+	newShot.x = x_position;
+	newShot.y = y_position;
+	shots.push_back(newShot);
 }
-
-
 
 void display()
 {
@@ -112,8 +113,8 @@ void display()
 	glEnd();
 
 	{
-	std::unique_lock<std::mutex> lock(asteroids_mtx);
-	
+		std::unique_lock<std::mutex> lock(asteroids_mtx);
+
 		glColor3f(1.0f, 1.0f, 1.0f);
 		for (auto element : asteroids) {
 			glLoadIdentity();
@@ -126,27 +127,22 @@ void display()
 		}
 	}
 
+	for (auto element : shots) {
+		glLoadIdentity();
+		glTranslatef(element.x, element.y, 0.0f);
+		glBegin(GL_POLYGON);
 
-    for(auto element: shots){
-        glLoadIdentity();
-        glTranslatef(element.x, element.y, 0.0f);
-        glBegin(GL_POLYGON);
-
-        glVertex2f(0.05f / scale, 0.1f / scale);
-        glVertex2f(-0.05f / scale, 0.1f / scale);
-        glVertex2f(-0.05f / scale, -0.1f / scale);
-        glVertex2f(0.05f / scale, -0.1f / scale);
-        glEnd();
-    }
-
-
+		glVertex2f(0.05f / scale, 0.1f / scale);
+		glVertex2f(-0.05f / scale, 0.1f / scale);
+		glVertex2f(-0.05f / scale, -0.1f / scale);
+		glVertex2f(0.05f / scale, -0.1f / scale);
+		glEnd();
+	}
 
 	glFlush();
 	glutPostRedisplay();
 
 	glutSwapBuffers();
-
-
 }
 
 void resize(int w, int h)
@@ -166,35 +162,28 @@ std::condition_variable move_dir_cond;
 
 void keyboard(unsigned char key, int x, int y)
 {
-	std::cout << " keys " << key << std::endl;
 	switch (key) {
-
 	case 32:
-		generateRandomPolygon();
+		shoot();
 		break;
 	}
-
 }
 
 void specialKeys(int key, int x, int y)
 {
-	std::cout << "special keys " << key << std::endl;
 	move_dir_enum new_dir = move_dir_enum::NONE;
 	switch (key) {
-	case GLUT_KEY_LEFT: {
+	case GLUT_KEY_LEFT:
 		new_dir = move_dir_enum::LEFT;
 		break;
-	}
 	case GLUT_KEY_RIGHT:
 		new_dir = move_dir_enum::RIGHT;
 		break;
-	
-    case 32:
+	case 116: {
 		generateRandomPolygon();
+		return;
 		break;
-    case GLUT_KEY_UP:
-		shoot();
-		break;
+	}
 	}
 
 	if (new_dir == move_dir_enum::NONE)
@@ -260,14 +249,14 @@ void move_thread()
 
 std::thread asteroids_thread;
 std::condition_variable asteroids_cv;
-bool run_asteroids = true;
+bool should_run = true;
 
 void asteroids_loop()
 {
-	while (run_asteroids) {
+	while (should_run) {
 		std::unique_lock<std::mutex> lock(asteroids_mtx);
 
-		for (auto &elem : asteroids) {
+		for (auto& elem : asteroids) {
 			elem.y -= 0.002;
 		}
 
@@ -275,22 +264,52 @@ void asteroids_loop()
 	}
 }
 
-
 std::thread shots_thread;
 std::condition_variable shots_cv;
-bool run_shots = true;
 
 void shots_loop()
 {
-	while (run_shots) {
+	while (should_run) {
 		std::unique_lock<std::mutex> lock(shots_mtx);
 
-		for (auto &elem : shots) {
+		for (auto& elem : shots) {
 			elem.y += 0.02;
 		}
 
 		shots_cv.wait_for(lock, std::chrono::milliseconds(10));
 	}
+}
+
+
+std::thread asteroids_generator_thread;
+std::condition_variable asteroids_generator_cv;
+int generator_delay = 3000;
+
+void asteroids_generator_loop()
+{
+	while (should_run) {
+		std::unique_lock<std::mutex> lock(shots_mtx);
+
+		generateRandomPolygon();
+
+		generator_delay *= 0.9;
+		std::cout << "delay " << generator_delay << std::endl;
+		std::uniform_int_distribution random_time(-400, 400);
+		generator_delay += random_time(e2);
+		if (generator_delay <= 150)
+			generator_delay = 400;
+
+		asteroids_generator_cv.wait_for(lock, std::chrono::milliseconds(generator_delay));
+	}
+}
+
+void close()
+{
+	should_run = false;
+	asteroids_generator_cv.notify_one();
+	asteroids_thread.join();
+	shots_thread.join();
+	asteroids_generator_thread.join();
 }
 
 int main(int argc, char** argv)
@@ -299,17 +318,17 @@ int main(int argc, char** argv)
 	glutInitDisplayMode(GLUT_DOUBLE | GLUT_RGB);
 	glutInitWindowSize(window_width, window_height);
 	glutCreateWindow("Asteroids - The Game");
-    generateRandomPolygon(); // generate the initial polygon
-    glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
+	glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
 	asteroids_thread = std::thread(asteroids_loop);
-    shots_thread = std::thread(shots_loop);
+	asteroids_generator_thread = std::thread(asteroids_generator_loop);
+	shots_thread = std::thread(shots_loop);
 	glutDisplayFunc(display);
 	glutReshapeFunc(resize);
 	glutKeyboardFunc(keyboard);
 	glutSpecialFunc(specialKeys);
 	glutSpecialUpFunc(specialKeysUp);
+	atexit(close);
 	glutMainLoop();
-
 
 	return 0;
 }
