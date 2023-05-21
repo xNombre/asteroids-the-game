@@ -14,6 +14,7 @@
 #include <vector>
 #include <list>
 #include <cstring>
+#include <chrono>
 
 std::mutex ship_pos_mtx;
 float x_position = 0.0f;
@@ -28,7 +29,7 @@ struct asteroid {
 	float vertices[6][2];
 	float x, y;
 
-	asteroid() :x(0), y(0)
+	asteroid():x(0), y(0)
 	{
 		memset(vertices, 0, sizeof(vertices));
 	}
@@ -37,7 +38,7 @@ struct asteroid {
 struct shot {
 	float x, y;
 
-	shot() :x(0), y(0) { }
+	shot():x(0), y(0) { }
 };
 
 std::mutex asteroids_mtx;
@@ -78,13 +79,36 @@ void generateRandomPolygon()
 	}
 }
 
+std::chrono::time_point<std::chrono::system_clock> next_shot = std::chrono::system_clock::now();
+const unsigned shoot_threshold_ms = 150;
+const unsigned fastshot_detection_threshold = 100;
+const unsigned fastshot_threshold_penalty = 700;
+const unsigned fastshot_max_count = 5;
+unsigned cur_fastshot = 0;
+
 void shoot()
 {
+	auto cur_time = std::chrono::system_clock::now();
+	if (next_shot > cur_time) {
+		return;
+	}
+
 	shot newShot;
-	std::cout << "strzał" << std::endl;
 	newShot.x = x_position;
 	newShot.y = y_position;
 	shots.push_back(newShot);
+
+	if (next_shot <= cur_time + std::chrono::milliseconds(fastshot_detection_threshold)) {
+		cur_fastshot++;
+	}
+
+	if (cur_fastshot == fastshot_max_count) {
+		cur_fastshot = 0;
+		next_shot = cur_time + std::chrono::milliseconds(fastshot_threshold_penalty);
+	}
+	else {
+		next_shot = cur_time + std::chrono::milliseconds(shoot_threshold_ms);
+	}
 }
 
 void display()
@@ -280,7 +304,6 @@ void shots_loop()
 	}
 }
 
-
 std::thread asteroids_generator_thread;
 std::condition_variable asteroids_generator_cv;
 int generator_delay = 3000;
@@ -293,7 +316,7 @@ void asteroids_generator_loop()
 		generateRandomPolygon();
 
 		generator_delay *= 0.9;
-		std::cout << "delay " << generator_delay << std::endl;
+		//std::cout << "delay " << generator_delay << std::endl;
 		std::uniform_int_distribution random_time(-400, 400);
 		generator_delay += random_time(e2);
 		if (generator_delay <= 150)
