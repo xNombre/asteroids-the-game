@@ -25,6 +25,12 @@ float triangle_speed = 0.005f;
 int window_width = 800;
 int window_height = 600;
 
+int score = 0;
+const int bonus_for_asteroid_shoot = 10;
+const int penalty_for_passed_asteroid = 35;
+
+int health = 3;
+
 struct asteroid {
 	float vertices[6][2];
 	float x, y;
@@ -169,6 +175,38 @@ void display()
 	glutSwapBuffers();
 }
 
+void update_points()
+{
+	std::string title = "Asteroids  -  The Game  -  Health: ";
+	for (int i = 0; i < health; i++)
+		title += "* ";
+	title += "  Score: ";
+	title += std::to_string(score);
+
+	glutSetWindowTitle(title.c_str());
+}
+
+void onAsteroidPass()
+{
+	score += penalty_for_passed_asteroid;
+	update_points();
+}
+
+std::chrono::time_point<std::chrono::system_clock> last_ast_shoot = std::chrono::system_clock::now();
+const unsigned shoot_combo_threshold_ms = 80;
+
+void onAsteroidShoot()
+{
+	auto cur_time = std::chrono::system_clock::now();
+	if (cur_time <= last_ast_shoot + std::chrono::milliseconds(shoot_combo_threshold_ms)) {
+		score += bonus_for_asteroid_shoot;
+	}
+	last_ast_shoot = cur_time;
+	score += bonus_for_asteroid_shoot;
+
+	update_points();
+}
+
 void resize(int w, int h)
 {
 	glutReshapeWindow(window_width, window_height);
@@ -284,6 +322,8 @@ void asteroids_loop()
 			elem.y -= 0.002;
 		}
 
+		// check if asteroid touched ship, if so end game
+
 		asteroids_cv.wait_for(lock, std::chrono::milliseconds(10));
 	}
 }
@@ -299,6 +339,8 @@ void shots_loop()
 		for (auto& elem : shots) {
 			elem.y += 0.02;
 		}
+
+		// check if shot touched any asteroid
 
 		shots_cv.wait_for(lock, std::chrono::milliseconds(10));
 	}
@@ -326,6 +368,31 @@ void asteroids_generator_loop()
 	}
 }
 
+void endGame()
+{
+	
+}
+
+void onHealtLoss()
+{
+	if (health == 1) {
+		// end game
+	}
+
+	health--;
+	score = 0;
+
+	std::unique_lock<std::mutex> lock(asteroids_mtx);
+	std::unique_lock<std::mutex> lock2(shots_mtx);
+	std::unique_lock<std::mutex> lock3(ship_pos_mtx);
+	asteroids.clear();
+	generator_delay = 3000;
+	shots.clear();
+	x_position = 0.0;
+
+	update_points();
+}
+
 void close()
 {
 	should_run = false;
@@ -341,6 +408,7 @@ int main(int argc, char** argv)
 	glutInitDisplayMode(GLUT_DOUBLE | GLUT_RGB);
 	glutInitWindowSize(window_width, window_height);
 	glutCreateWindow("Asteroids - The Game");
+	update_points();
 	glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
 	asteroids_thread = std::thread(asteroids_loop);
 	asteroids_generator_thread = std::thread(asteroids_generator_loop);
