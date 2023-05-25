@@ -315,18 +315,43 @@ bool should_run = true;
 
 void asteroids_loop()
 {
-	while (should_run) {
-		std::unique_lock<std::mutex> lock(asteroids_mtx);
+    while (should_run) {
+        std::unique_lock<std::mutex> lock(asteroids_mtx);
 
-		for (auto& elem : asteroids) {
-			elem.y -= 0.002;
-		}
+        for (auto it = asteroids.begin(); it != asteroids.end(); ) {
+            it->y -= 0.002;
 
-		// check if asteroid touched ship, if so end game
+            std::lock_guard<std::mutex> ship_lock(ship_pos_mtx);
+            float ship_x = x_position;
+            float ship_y = y_position;
 
-		asteroids_cv.wait_for(lock, std::chrono::milliseconds(10));
-	}
+            bool overlap = false;
+
+            for (int i = 0; i < 6; i++) {
+                float asteroid_x = it->vertices[i][0] + it->x;
+                float asteroid_y = it->vertices[i][1] + it->y;
+
+                float distance = std::sqrt(std::pow(ship_x - asteroid_x, 2) + std::pow(ship_y - asteroid_y, 2));
+                if (distance <= 0.04) { // Adjust the overlap threshold as needed
+                    overlap = true;
+                    break;
+                }
+            }
+
+            if (overlap) {
+                std::cout << "Ship hit by asteroid!" << std::endl;
+                should_run = false; // End the game or take appropriate action
+            }
+
+            if (!overlap && it != asteroids.end()) {
+                ++it;
+            }
+        }
+
+        asteroids_cv.wait_for(lock, std::chrono::milliseconds(10));
+    }
 }
+
 
 std::thread shots_thread;
 std::condition_variable shots_cv;
