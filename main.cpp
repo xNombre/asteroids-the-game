@@ -27,7 +27,7 @@ int window_height = 600;
 
 int score = 0;
 const int bonus_for_asteroid_shoot = 10;
-const int penalty_for_passed_asteroid = 35;
+const int penalty_for_passed_asteroid = -35;
 
 int health = 3;
 
@@ -88,7 +88,7 @@ void generateRandomPolygon()
 std::chrono::time_point<std::chrono::system_clock> next_shot = std::chrono::system_clock::now();
 const unsigned shoot_threshold_ms = 150;
 const unsigned fastshot_detection_threshold = 100;
-const unsigned fastshot_threshold_penalty = 700;
+const unsigned fastshot_threshold_penalty = 400;
 const unsigned fastshot_max_count = 5;
 unsigned cur_fastshot = 0;
 
@@ -315,88 +315,98 @@ bool should_run = true;
 
 void asteroids_loop()
 {
-    while (should_run) {
-        std::unique_lock<std::mutex> lock(asteroids_mtx);
+	std::unique_lock<std::mutex> ship_lock(ship_pos_mtx, std::defer_lock);
+	std::unique_lock<std::mutex> lock(asteroids_mtx);
 
-        for (auto it = asteroids.begin(); it != asteroids.end(); ) {
-            it->y -= 0.002;
+	while (should_run) {
+		ship_lock.lock();
+		for (auto it = asteroids.begin(); it != asteroids.end(); ) {
+			it->y -= 0.002;
 
-            std::lock_guard<std::mutex> ship_lock(ship_pos_mtx);
-            float ship_x = x_position;
-            float ship_y = y_position;
+			if (it->y <= -1.2) {
+				it = asteroids.erase(it);
+				std::cout << "kill asteroid" << std::endl;
+				onAsteroidPass();
+				continue;
+			}
 
-            bool overlap = false;
+			float ship_x = x_position;
+			float ship_y = y_position;
 
-            for (int i = 0; i < 6; i++) {
-                float asteroid_x = it->vertices[i][0] + it->x;
-                float asteroid_y = it->vertices[i][1] + it->y;
+			bool overlap = false;
 
-                float distance = std::sqrt(std::pow(ship_x - asteroid_x, 2) + std::pow(ship_y - asteroid_y, 2));
-                if (distance <= 0.04) { // Adjust the overlap threshold as needed
-                    overlap = true;
-                    break;
-                }
-            }
+			for (int i = 0; i < 6; i++) {
+				float asteroid_x = it->vertices[i][0] + it->x;
+				float asteroid_y = it->vertices[i][1] + it->y;
 
-            if (overlap) {
-                std::cout << "Ship hit by asteroid!" << std::endl;
-                should_run = false; // End the game or take appropriate action
-            }
+				float distance = std::sqrt(std::pow(ship_x - asteroid_x, 2) + std::pow(ship_y - asteroid_y, 2));
+				if (distance <= 0.1) { // Adjust the overlap threshold as needed
+					overlap = true;
+					break;
+				}
+			}
 
-            if (!overlap && it != asteroids.end()) {
-                ++it;
-            }
-        }
+			if (overlap) {
+				std::cout << "Ship hit by asteroid!" << std::endl;
+				should_run = false; // End the game or take appropriate action
+				return;
+			}
 
-        asteroids_cv.wait_for(lock, std::chrono::milliseconds(10));
-    }
+			it++;
+		}
+		ship_lock.unlock();
+
+		asteroids_cv.wait_for(lock, std::chrono::milliseconds(10));
+	}
 }
-
 
 std::thread shots_thread;
 std::condition_variable shots_cv;
 
-
 void shots_loop()
 {
-    while (should_run) {
-        std::unique_lock<std::mutex> lock(shots_mtx);
+	std::unique_lock<std::mutex> asteroid_lock(asteroids_mtx, std::defer_lock);
+	std::unique_lock<std::mutex> lock(shots_mtx);
 
-        for (auto it = shots.begin(); it != shots.end(); ) {
-            it->y += 0.02;
+	while (should_run) {
+		asteroid_lock.lock();
+		for (auto it = shots.begin(); it != shots.end(); ) {
+			it->y += 0.02;
 
-            std::unique_lock<std::mutex> asteroid_lock(asteroids_mtx);
+			if (it->y >= 1.0) {
+				it = shots.erase(it);
+				continue;
+			}
+
 			bool overlap = false;
-            for (auto asteroid_it = asteroids.begin(); asteroid_it != asteroids.end(); ++asteroid_it) {
-                
+			for (auto asteroid_it = asteroids.begin(); asteroid_it != asteroids.end(); asteroid_it++) {
+				for (int i = 0; i < 6; i++) {
+					float asteroid_x = asteroid_it->vertices[i][0] + asteroid_it->x;
+					float asteroid_y = asteroid_it->vertices[i][1] + asteroid_it->y;
 
-                for (int i = 0; i < 6; i++) {
-                    float asteroid_x = asteroid_it->vertices[i][0] + asteroid_it->x;
-                    float asteroid_y = asteroid_it->vertices[i][1] + asteroid_it->y;
+					float distance = std::sqrt(std::pow(it->x - asteroid_x, 2) + std::pow(it->y - asteroid_y, 2));
+					if (distance <= 0.03) { // Overlap adjustment
+						overlap = true;
+						break;
+					}
+				}
 
-                    float distance = std::sqrt(std::pow(it->x - asteroid_x, 2) + std::pow(it->y - asteroid_y, 2));
-                    if (distance <= 0.03) { // Overlap adjustment
-                        overlap = true;
-                        break;
-                    }
-                }
+				if (overlap) {
+					onAsteroidShoot();
+					asteroid_it = asteroids.erase(asteroid_it);
+					it = shots.erase(it);
+					break;
+				}
+			}
 
-                if (overlap) {
-                    score+=bonus_for_asteroid_shoot;
-                    asteroid_it = asteroids.erase(asteroid_it);
-                    it = shots.erase(it);
-                    asteroid_lock.unlock();
-                    break;
-                }
-            }
+			if (!overlap) {
+				++it;
+			}
+		}
+		asteroid_lock.unlock();
 
-            if (!overlap && it != shots.end()) {
-                ++it;
-            }
-        }
-
-        shots_cv.wait_for(lock, std::chrono::milliseconds(10));
-    }
+		shots_cv.wait_for(lock, std::chrono::milliseconds(10));
+	}
 }
 
 std::thread asteroids_generator_thread;
@@ -423,7 +433,7 @@ void asteroids_generator_loop()
 
 void endGame()
 {
-	
+
 }
 
 void onHealtLoss()
@@ -438,6 +448,7 @@ void onHealtLoss()
 	std::unique_lock<std::mutex> lock(asteroids_mtx);
 	std::unique_lock<std::mutex> lock2(shots_mtx);
 	std::unique_lock<std::mutex> lock3(ship_pos_mtx);
+
 	asteroids.clear();
 	generator_delay = 3000;
 	shots.clear();
