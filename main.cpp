@@ -331,19 +331,47 @@ void asteroids_loop()
 std::thread shots_thread;
 std::condition_variable shots_cv;
 
+
 void shots_loop()
 {
-	while (should_run) {
-		std::unique_lock<std::mutex> lock(shots_mtx);
+    while (should_run) {
+        std::unique_lock<std::mutex> lock(shots_mtx);
 
-		for (auto& elem : shots) {
-			elem.y += 0.02;
-		}
+        for (auto it = shots.begin(); it != shots.end(); ) {
+            it->y += 0.02;
 
-		// check if shot touched any asteroid
+            std::unique_lock<std::mutex> asteroid_lock(asteroids_mtx);
+			bool overlap = false;
+            for (auto asteroid_it = asteroids.begin(); asteroid_it != asteroids.end(); ++asteroid_it) {
+                
 
-		shots_cv.wait_for(lock, std::chrono::milliseconds(10));
-	}
+                for (int i = 0; i < 6; i++) {
+                    float asteroid_x = asteroid_it->vertices[i][0] + asteroid_it->x;
+                    float asteroid_y = asteroid_it->vertices[i][1] + asteroid_it->y;
+
+                    float distance = std::sqrt(std::pow(it->x - asteroid_x, 2) + std::pow(it->y - asteroid_y, 2));
+                    if (distance <= 0.03) { // Overlap adjustment
+                        overlap = true;
+                        break;
+                    }
+                }
+
+                if (overlap) {
+                    score+=bonus_for_asteroid_shoot;
+                    asteroid_it = asteroids.erase(asteroid_it);
+                    it = shots.erase(it);
+                    asteroid_lock.unlock();
+                    break;
+                }
+            }
+
+            if (!overlap && it != shots.end()) {
+                ++it;
+            }
+        }
+
+        shots_cv.wait_for(lock, std::chrono::milliseconds(10));
+    }
 }
 
 std::thread asteroids_generator_thread;
