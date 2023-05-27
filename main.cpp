@@ -49,6 +49,9 @@ struct shot {
 
 std::mutex asteroids_mtx;
 std::mutex shots_mtx;
+std::condition_variable asteroids_cv;
+
+std::condition_variable shots_cv;
 
 std::mt19937 e2(std::random_device{}());
 const float radius = 0.4f; // radius of the polygon
@@ -80,7 +83,10 @@ void generateRandomPolygon()
 		newAsteroid.vertices[i][1] = y / 5.f;
 	}
 	{
-		std::unique_lock<std::mutex> lock(asteroids_mtx);
+		std::lock_guard<std::mutex> lock(asteroids_mtx);
+		if (asteroids.empty()) {
+			asteroids_cv.notify_one();
+		}
 		asteroids.push_back(newAsteroid);
 	}
 }
@@ -99,10 +105,17 @@ void shoot()
 		return;
 	}
 
-	shot newShot;
-	newShot.x = x_position;
-	newShot.y = y_position;
-	shots.push_back(newShot);
+	{
+		std::unique_lock<std::mutex> lock(shots_mtx);
+		if (shots.empty()) {
+			shots_cv.notify_one();
+		}
+
+		shot newShot;
+		newShot.x = x_position;
+		newShot.y = y_position;
+		shots.push_back(newShot);
+	}
 
 	if (next_shot <= cur_time + std::chrono::milliseconds(fastshot_detection_threshold)) {
 		cur_fastshot++;
@@ -310,8 +323,8 @@ void move_thread()
 }
 
 std::thread asteroids_thread;
-std::condition_variable asteroids_cv;
 bool should_run = true;
+unsigned asteroids_sleep_us = 10000;
 
 void asteroids_loop()
 {
@@ -356,12 +369,16 @@ void asteroids_loop()
 		}
 		ship_lock.unlock();
 
-		asteroids_cv.wait_for(lock, std::chrono::milliseconds(10));
+		if (asteroids.empty()) {
+			asteroids_cv.wait(lock);
+		}
+		else {
+			asteroids_cv.wait_until(lock, std::chrono::system_clock::now() + std::chrono::microseconds(asteroids_sleep_us));
+		}
 	}
 }
 
 std::thread shots_thread;
-std::condition_variable shots_cv;
 
 void shots_loop()
 {
@@ -405,29 +422,36 @@ void shots_loop()
 		}
 		asteroid_lock.unlock();
 
-		shots_cv.wait_for(lock, std::chrono::milliseconds(10));
+		if (shots.empty()) {
+			shots_cv.wait(lock);
+		}
+		else {
+			shots_cv.wait_until(lock, std::chrono::system_clock::now() + std::chrono::milliseconds(10));
+		}
 	}
 }
 
 std::thread asteroids_generator_thread;
 std::condition_variable asteroids_generator_cv;
+std::mutex asteroids_generator_mtx;
 int generator_delay = 3000;
 
 void asteroids_generator_loop()
 {
 	while (should_run) {
-		std::unique_lock<std::mutex> lock(shots_mtx);
+		std::unique_lock<std::mutex> lock(asteroids_generator_mtx);
 
 		generateRandomPolygon();
 
 		generator_delay *= 0.9;
-		//std::cout << "delay " << generator_delay << std::endl;
 		std::uniform_int_distribution random_time(-400, 400);
 		generator_delay += random_time(e2);
 		if (generator_delay <= 150)
 			generator_delay = 400;
 
-		asteroids_generator_cv.wait_for(lock, std::chrono::milliseconds(generator_delay));
+		asteroids_sleep_us = (double)asteroids_sleep_us * 0.98;
+
+		asteroids_generator_cv.wait_until(lock, std::chrono::system_clock::now() + std::chrono::milliseconds(generator_delay));
 	}
 }
 
@@ -469,9 +493,9 @@ void close()
 int main(int argc, char** argv)
 {
 	glutInit(&argc, argv);
-	glutInitDisplayMode(GLUT_DOUBLE | GLUT_RGB);
+	glutInitDisplayMode(GLUT_DOUBLE | GLUT_RGB | GLUT_MULTISAMPLE);
 	glutInitWindowSize(window_width, window_height);
-	glutCreateWindow("Asteroids - The Game");
+	glutCreateWindow("");
 	update_points();
 	glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
 	asteroids_thread = std::thread(asteroids_loop);
