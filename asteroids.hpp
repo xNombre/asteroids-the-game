@@ -17,5 +17,5 @@ struct asteroid {
 };
 
 extern locked_data<std::list<asteroid>> get_asteroids_list();
-extern void stop();
-extern void start();
+extern void stopAsteroidsThreads();
+extern void startAsteroidsThreads();

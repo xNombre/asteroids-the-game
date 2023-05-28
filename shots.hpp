@@ -7,10 +7,12 @@
 struct shot {
 	float x, y;
 
-	shot():x(0), y(0) { }
+	shot()
+		: x(0), y(0)
+	{ }
 };
 
 extern void createNewShot();
 extern locked_data<std::list<shot>> getShotsList();
-extern void startShotsLoop();
-extern void stopShotsLoop();
+extern void startShotsThread();
+extern void stopShotsThread();

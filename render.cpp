@@ -96,11 +96,12 @@ void init_glut()
 	glutSpecialUpFunc(onSpecialKeyUp);
 }
 
-void start_loop()
+void glut_start_loop()
 {
 	glutMainLoop();
 }
 
-void set_window_title(const char *title) {
+void set_window_title(const char* title)
+{
 	glutSetWindowTitle(title);
 }

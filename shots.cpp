@@ -52,7 +52,7 @@ static void shots_loop()
 					float asteroid_y = asteroid_it->vertices[i][1] + asteroid_it->y;
 
 					float distance = std::sqrt(std::pow(it->x - asteroid_x, 2) + std::pow(it->y - asteroid_y, 2));
-					if (distance <= 0.03) { // Overlap adjustment
+					if (distance <= 0.03) {
 						overlap = true;
 						break;
 					}
@@ -116,13 +116,21 @@ void createNewShot()
 	}
 }
 
-void startShotsLoop()
+void startShotsThread()
 {
+	should_run = true;
+
 	shots_thread = std::thread(shots_loop);
 }
 
-void stopShotsLoop()
+void stopShotsThread()
 {
-	should_run = false;
+	{
+		std::lock_guard<std::mutex> lock(shots_mtx);
+		should_run = false;
+
+		shots_cv.notify_one();
+	}
+
 	shots_thread.join();
 }
